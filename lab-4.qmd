@@ -1,0 +1,233 @@
+---
+title: "lab-4"
+author: "Matt Babb"
+format:
+  dashboard:
+    orientation: columns
+    theme: minty
+    logo: Dharma_Wheel_2.svg
+    nav-buttons:
+      - icon: envelope
+        href: "mailto:msbabb@calpoly.edu"
+        aria-label: "Email Matt"
+      - icon: linkedin
+        href: "https://www.linkedin.com/in/matt-babb-854b1523b/"
+        aria-label: "View LinkedIn"
+      - icon: github
+        href: "https://github.com/mattbabb737"
+        aria-label: "GitHub"
+editor: source
+embed-resources: true
+echo: false
+warning: false
+error: false
+server: shiny
+---
+
+# Belief that Vaccines are Safe
+
+
+```{r}
+#| context: setup
+
+# Load libraries
+library(readxl)
+library(tidyverse)
+library(shiny)
+library(plotly)
+library(forcats)
+library(ggridges)
+library(crosstalk)
+library(bslib)
+library(DT)
+library(scales)
+library(htmltools)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(sf)
+
+# Load and prepare data
+wgm_raw <- read_excel("wgm2018-dataset-crosstabs-all-countries_2.xlsx", skip = 2)
+wgm_clean <- wgm_raw %>% tidyr::fill(Question)
+
+region_map <- list(
+  "Asia" = c("Afghanistan", "Bangladesh", "India", "Iran", "Nepal", "Pakistan", "Sri Lanka",
+             "Cambodia", "Indonesia", "Laos", "Malaysia", "Myanmar", "Philippines", "Singapore",
+             "Thailand", "Vietnam", "China", "Japan", "Mongolia", "South Korea", "Taiwan"),
+  "Middle East and North Africa" = c("Algeria", "Egypt", "Libya", "Morocco", "Tunisia", "Iraq",
+             "Israel", "Jordan", "Kuwait", "Lebanon", "Palestinian Territories", "Saudi Arabia",
+             "Turkey", "United Arab Emirates", "Yemen"),
+  "Sub-Saharan Africa" = c("Burundi", "Comoros", "Ethiopia", "Kenya", "Madagascar", "Malawi",
+             "Mauritius", "Mozambique", "Rwanda", "Tanzania", "Uganda", "Zambia", "Zimbabwe",
+             "Benin", "Burkina Faso", "Ghana", "Guinea", "Ivory Coast", "Liberia", "Mali",
+             "Mauritania", "Niger", "Nigeria", "Senegal", "Sierra Leone", "The Gambia", "Togo",
+             "Botswana", "Namibia", "South Africa", "Eswatini", "Cameroon", "Chad",
+             "Republic of the Congo", "Gabon"),
+  "Americas" = c("Costa Rica", "Dominican Republic", "El Salvador", "Guatemala", "Haiti",
+             "Honduras", "Mexico", "Nicaragua", "Panama", "Argentina", "Bolivia", "Brazil",
+             "Chile", "Colombia", "Ecuador", "Paraguay", "Peru", "Uruguay", "Venezuela",
+             "Canada", "United States"),
+  "Europe" = c("Denmark", "Estonia", "Finland", "Iceland", "Ireland", "Latvia", "Lithuania",
+             "Norway", "Sweden", "United Kingdom", "Albania", "Bosnia and Herzegovina",
+             "Croatia", "Cyprus", "Greece", "Italy", "Malta", "North Macedonia", "Montenegro",
+             "Portugal", "Serbia", "Slovenia", "Spain", "Austria", "Belgium", "France",
+             "Germany", "Luxembourg", "Netherlands", "Switzerland"),
+  "Former Soviet Union" = c("Armenia", "Azerbaijan", "Georgia", "Kazakhstan", "Kyrgyzstan",
+             "Tajikistan", "Turkmenistan", "Uzbekistan", "Belarus", "Bulgaria",
+             "Czech Republic", "Hungary", "Moldova", "Poland", "Romania", "Russia",
+             "Slovakia", "Ukraine")
+)
+
+# Belief that Vaccines are Safe
+wgm_agree <- wgm_clean %>%
+  filter(
+    Question == "Q25 Do you strongly or somewhat agree, strongly or somewhat disagree or neither agree nor disagree with the following statement? Vaccines are safe.",
+    Response %in% c("Strongly agree", "Somewhat agree")
+  ) %>%
+  group_by(Country) %>%
+  summarise(percent_agree = sum(`Column N %...4`, na.rm = TRUE)) %>%
+  arrange(desc(percent_agree))
+
+country_to_region <- unlist(lapply(names(region_map), function(region) {
+  setNames(rep(region, length(region_map[[region]])), region_map[[region]])
+}))
+
+wgm_agree <- wgm_agree %>%
+  mutate(Region = country_to_region[Country],
+         Region = ifelse(is.na(Region), "Other/Unclassified", Region))
+
+wgm_agree_filtered <- wgm_agree %>%
+  filter(Region != "Unclassified") %>%
+  mutate(Region = fct_reorder(Region, percent_agree, .fun = median))
+
+shared_data <- SharedData$new(wgm_agree_filtered)
+
+region_colors <- c(
+  "Asia" = "#E69F00",
+  "Sub-Saharan Africa" = "#56B4E9",
+  "Middle East and North Africa" = "#009E73",
+  "Americas" = "#F0E442",
+  "Other/Unclassified" = "#0072B2",
+  "Europe" = "#D55E00",
+  "Former Soviet Union" = "#CC79A7"
+)
+
+p <- ggplot(shared_data, aes(x = percent_agree, y = Region, fill = Region)) +
+  geom_density_ridges(scale = 1.2, alpha = 0.6, color = "white") +
+  geom_point(aes(text = paste("Country:", Country, "<br>Score:", round(percent_agree * 100, 1), "%")),
+             position = position_jitter(height = 0.1),
+             size = 3,
+             color = "black") +
+  scale_fill_manual(values = region_colors) +
+  scale_x_continuous(limits = c(0.2, 1.0), labels = scales::percent_format(accuracy = 1)) +
+  labs(x = "Agreement", y = NULL) +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 16, face = "bold"), legend.position = "none")
+
+plotly_obj <- ggplotly(p, tooltip = "text") %>%
+  layout(
+    title = list(
+      text = "<b>Belief that Vaccines are Safe by Region</b>",
+      x = 0,
+      xanchor = "left",
+      y = 0.95,
+      yanchor = "top",
+      font = list(size = 20, family = "Arial", color = "black")
+    )
+  )
+
+# Technology and Jobs
+q19_overall <- wgm_clean %>%
+  filter(Question == "Q19 Overall, do you think that science and technology will increase or decrease the number of jobs in your local area in the next five years?") %>%
+  select(Country, Response, OverallPercent = `Column N %...4`) %>%
+  distinct() %>%
+  pivot_wider(names_from = Response, values_from = OverallPercent)
+
+world <- ne_countries(scale = "medium", returnclass = "sf") %>%
+  st_centroid()
+
+centroids <- world %>%
+  select(Country = name_long, geometry) %>%
+  st_coordinates() %>%
+  as.data.frame() %>%
+  bind_cols(Country = world$name_long)
+
+q19_final <- q19_overall %>%
+  select(Country, Increase, Decrease) %>%
+  mutate(Total = Increase - Decrease)
+
+q19_geo <- q19_final %>%
+  left_join(centroids, by = "Country") %>%
+  filter(!is.na(X) & !is.na(Y))
+
+datatable_with_region <- q19_geo %>%
+  mutate(
+    Region = country_to_region[Country],
+    Region = ifelse(is.na(Region), "Other/Unclassified", Region)
+  ) %>%
+  mutate(
+    Increase = round(Increase * 100, 1),
+    Decrease = round(Decrease * 100, 1),
+    Net = round(Total * 100, 1)
+  ) %>%
+  select(Country, Region, Increase, Decrease, Net)
+# Belief that Vaccines are Safe
+```
+
+
+```{r}
+plotlyOutput("plot1")
+```
+
+
+# Belief that Technology Will Increase Jobs in the Next Five Years
+
+
+## Continent view {.sidebar}
+
+
+```{r}
+checkboxGroupInput(
+  inputId = "continent_filter",
+  label = "Select Continents:",
+  choices = names(region_map),
+  selected = names(region_map)
+)
+```
+
+## Table view
+
+```{r}
+DTOutput("job_table")
+```
+
+```{r}
+#| context: server
+
+output$plot1 <- renderPlotly({
+  plotly_obj
+})
+
+filtered_table <- reactive({
+  req(input$continent_filter)
+  datatable_with_region %>%
+    filter(Region %in% input$continent_filter)
+})
+
+output$job_table <- renderDT({
+  datatable(
+    filtered_table(),
+    caption = htmltools::tags$caption(
+      style = "caption-side: top; text-align: left; font-weight: bold;",
+      "Agreement (%) that Technology Will Increase Jobs in the Next 5 Years"
+    ),
+    options = list(pageLength = 15),
+    rownames = FALSE
+  ) %>%
+    formatStyle(
+      "Net",
+      color = styleInterval(0, c("#440154", "#228B22")),
+      fontWeight = "bold"
+    )
+})
+```
