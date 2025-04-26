@@ -122,13 +122,10 @@ q19_geo <- q19_final %>%
 datatable_with_region <- q19_geo %>%
   mutate(
     Region = country_to_region[Country],
-    Region = ifelse(is.na(Region), "Other/Unclassified", Region)
+    Region = ifelse(is.na(Region), "Other/Unclassified", Region),
+    Net = Increase - Decrease  # <-- Add this line to create Net again
   ) %>%
-  mutate(
-    Increase = round(Increase * 100, 1),
-    Decrease = round(Decrease * 100, 1),
-    Net = round(Total * 100, 1)
-  ) %>%
+  filter(!is.na(Increase), !is.na(Decrease), !is.na(Net)) %>%
   select(Country, Region, Increase, Decrease, Net)
 ```
 
@@ -174,7 +171,12 @@ output$plot1 <- renderPlotly({
     filter(percent_agree >= input$threshold)
   
   # Make a plot (without text aesthetic inside ggplot)
-  p <- ggplot(filtered_data, aes(x = percent_agree, y = Region, fill = Region)) +
+  p <- ggplot(filtered_data, aes(
+  x = percent_agree,
+  y = Region,
+  fill = Region,
+  text = paste0(Country, ": ", scales::percent(percent_agree, accuracy = 0.1))
+)) +
     geom_density_ridges(scale = 1.2, alpha = 0.6, color = "white") +
     geom_point(
       position = position_jitter(height = 0.1),
@@ -199,7 +201,7 @@ output$plot1 <- renderPlotly({
     theme(plot.title = element_text(size = 16, face = "bold"), legend.position = "none")
   
   # Now add tooltip separately in ggplotly
-  ggplotly(p, tooltip = c("x", "y", "Country")) %>%
+  ggplotly(p, tooltip = "text") %>%
     layout(
       title = list(
         text = "<b>Belief that Vaccines are Safe by Region</b>",
@@ -229,10 +231,11 @@ output$job_table <- renderDT({
     options = list(pageLength = 15),
     rownames = FALSE
   ) %>%
-    formatStyle(
+    formatStyle(        # ⬅️ FIRST, color it
       "Net",
       color = styleInterval(0, c("#440154", "#228B22")),
       fontWeight = "bold"
-    )
+    ) %>%
+    formatPercentage(c("Increase", "Decrease", "Net"), 1)   # ⬅️ THEN make percentages pretty
 })
 ```
