@@ -154,6 +154,11 @@ checkboxGroupInput(
 )
 ```
 
+
+```{r}
+uiOutput("region_extremes_text")
+```
+
 ## Table view
 
 ```{r}
@@ -237,5 +242,42 @@ output$job_table <- renderDT({
       fontWeight = "bold"
     ) %>%
     formatPercentage(c("Increase", "Decrease", "Net"), 1)   # ⬅️ THEN make percentages pretty
+})
+
+output$region_extremes_text <- renderUI({
+  req(input$continent_filter)   # Only run if continents are selected
+  
+  # Filter to selected continents
+  filtered <- datatable_with_region %>%
+    filter(Region %in% input$continent_filter)
+  
+  if (nrow(filtered) == 0) {
+    return("No data available for selected regions.")
+  }
+  
+  # Find highest and lowest Net scoring countries within each selected region
+  summaries <- filtered %>%
+    group_by(Region) %>%
+    summarise(
+      HighestCountry = Country[which.max(Net)],
+      HighestScore = max(Net, na.rm = TRUE),
+      LowestCountry = Country[which.min(Net)],
+      LowestScore = min(Net, na.rm = TRUE),
+      .groups = "drop"
+    )
+  
+  # Build the text output
+  htmltools::tagList(
+    lapply(1:nrow(summaries), function(i) {
+      region_info <- summaries[i,]
+      
+      div(
+        style = "margin-bottom: 1em; font-size: 13px;",
+        strong(region_info$Region), br(),
+        paste0("Highest Net: ", region_info$HighestCountry, " (", round(region_info$HighestScore * 100, 1), "%)"), br(),
+        paste0("Lowest Net: ", region_info$LowestCountry, " (", round(region_info$LowestScore * 100, 1), "%)")
+      )
+    })
+  )
 })
 ```
