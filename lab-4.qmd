@@ -137,6 +137,8 @@ datatable_with_region <- q19_geo %>%
 plotlyOutput("plot1")
 ```
 
+## Filter by Agreement Threshold {.sidebar}
+
 ```{r}
 sliderInput("threshold", "Minimum Agreement Percentage:", min = 0.2, max = 1.0, value = 0.2, step = 0.01)
 ```
