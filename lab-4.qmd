@@ -26,7 +26,6 @@ server: shiny
 
 # Belief that Vaccines are Safe
 
-
 ```{r}
 #| context: setup
 
@@ -78,7 +77,7 @@ region_map <- list(
              "Slovakia", "Ukraine")
 )
 
-# Belief that Vaccines are Safe
+# Belief that Vaccines are Safe Data Prep
 wgm_agree <- wgm_clean %>%
   filter(
     Question == "Q25 Do you strongly or somewhat agree, strongly or somewhat disagree or neither agree nor disagree with the following statement? Vaccines are safe.",
@@ -96,47 +95,7 @@ wgm_agree <- wgm_agree %>%
   mutate(Region = country_to_region[Country],
          Region = ifelse(is.na(Region), "Other/Unclassified", Region))
 
-wgm_agree_filtered <- wgm_agree %>%
-  filter(Region != "Unclassified") %>%
-  mutate(Region = fct_reorder(Region, percent_agree, .fun = median))
-
-shared_data <- SharedData$new(wgm_agree_filtered)
-
-region_colors <- c(
-  "Asia" = "#E69F00",
-  "Sub-Saharan Africa" = "#56B4E9",
-  "Middle East and North Africa" = "#009E73",
-  "Americas" = "#F0E442",
-  "Other/Unclassified" = "#0072B2",
-  "Europe" = "#D55E00",
-  "Former Soviet Union" = "#CC79A7"
-)
-
-p <- ggplot(shared_data, aes(x = percent_agree, y = Region, fill = Region)) +
-  geom_density_ridges(scale = 1.2, alpha = 0.6, color = "white") +
-  geom_point(aes(text = paste("Country:", Country, "<br>Score:", round(percent_agree * 100, 1), "%")),
-             position = position_jitter(height = 0.1),
-             size = 3,
-             color = "black") +
-  scale_fill_manual(values = region_colors) +
-  scale_x_continuous(limits = c(0.2, 1.0), labels = scales::percent_format(accuracy = 1)) +
-  labs(x = "Agreement", y = NULL) +
-  theme_minimal() +
-  theme(plot.title = element_text(size = 16, face = "bold"), legend.position = "none")
-
-plotly_obj <- ggplotly(p, tooltip = "text") %>%
-  layout(
-    title = list(
-      text = "<b>Belief that Vaccines are Safe by Region</b>",
-      x = 0,
-      xanchor = "left",
-      y = 0.95,
-      yanchor = "top",
-      font = list(size = 20, family = "Arial", color = "black")
-    )
-  )
-
-# Technology and Jobs
+# Table Data Prep
 q19_overall <- wgm_clean %>%
   filter(Question == "Q19 Overall, do you think that science and technology will increase or decrease the number of jobs in your local area in the next five years?") %>%
   select(Country, Response, OverallPercent = `Column N %...4`) %>%
@@ -171,7 +130,6 @@ datatable_with_region <- q19_geo %>%
     Net = round(Total * 100, 1)
   ) %>%
   select(Country, Region, Increase, Decrease, Net)
-# Belief that Vaccines are Safe
 ```
 
 
@@ -179,12 +137,14 @@ datatable_with_region <- q19_geo %>%
 plotlyOutput("plot1")
 ```
 
+```{r}
+sliderInput("threshold", "Minimum Agreement Percentage:", min = 0.2, max = 1.0, value = 0.2, step = 0.01)
+```
+
 
 # Belief that Technology Will Increase Jobs in the Next Five Years
 
-
 ## Continent view {.sidebar}
-
 
 ```{r}
 checkboxGroupInput(
@@ -205,9 +165,52 @@ DTOutput("job_table")
 #| context: server
 
 output$plot1 <- renderPlotly({
-  plotly_obj
+  req(input$threshold)
+  
+  # Filter data based on threshold
+  filtered_data <- wgm_agree %>%
+    filter(percent_agree >= input$threshold)
+  
+  # Make a plot (without text aesthetic inside ggplot)
+  p <- ggplot(filtered_data, aes(x = percent_agree, y = Region, fill = Region)) +
+    geom_density_ridges(scale = 1.2, alpha = 0.6, color = "white") +
+    geom_point(
+      position = position_jitter(height = 0.1),
+      size = 3,
+      color = "black"
+    ) +
+    scale_fill_manual(values = c(
+      "Asia" = "#E69F00",
+      "Sub-Saharan Africa" = "#56B4E9",
+      "Middle East and North Africa" = "#009E73",
+      "Americas" = "#F0E442",
+      "Other/Unclassified" = "#0072B2",
+      "Europe" = "#D55E00",
+      "Former Soviet Union" = "#CC79A7"
+    )) +
+    scale_x_continuous(
+      limits = c(0.2, 1.0),
+      labels = scales::percent_format(accuracy = 1)
+    ) +
+    labs(x = "Agreement", y = NULL) +
+    theme_minimal() +
+    theme(plot.title = element_text(size = 16, face = "bold"), legend.position = "none")
+  
+  # Now add tooltip separately in ggplotly
+  ggplotly(p, tooltip = c("x", "y", "Country")) %>%
+    layout(
+      title = list(
+        text = "<b>Belief that Vaccines are Safe by Region</b>",
+        x = 0,
+        xanchor = "left",
+        y = 0.95,
+        yanchor = "top",
+        font = list(size = 20, family = "Arial", color = "black")
+      )
+    )
 })
 
+# --- Table (Technology and Jobs, filtered by continent) ---
 filtered_table <- reactive({
   req(input$continent_filter)
   datatable_with_region %>%
