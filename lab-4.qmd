@@ -266,18 +266,34 @@ output$region_extremes_text <- renderUI({
       .groups = "drop"
     )
   
+  # Helper function to color numbers
+  color_score <- function(score) {
+    color <- if (score >= 0) "#228B22" else "#440154"
+    span(style = paste0("color: ", color, "; font-weight: bold;"),
+         paste0(round(score * 100, 1), "%"))
+  }
+  
   # Build the text output
   htmltools::tagList(
-    lapply(1:nrow(summaries), function(i) {
-      region_info <- summaries[i,]
-      
+  lapply(1:nrow(summaries), function(i) {
+    region_info <- summaries[i,]
+    
+    div(
+      style = paste0(
+        "margin-bottom: 1em; padding: 0.8em; background-color: #f9f9f9; ",
+        "border-left: 5px solid #0072B2; border-radius: 6px; ",
+        "box-shadow: 0 1px 2px rgba(0,0,0,0.05); font-size: 13px;"
+      ),
+      strong(style = "font-size: 14px;", region_info$Region), br(),
       div(
-        style = "margin-bottom: 1em; font-size: 13px;",
-        strong(region_info$Region), br(),
-        paste0("Highest Net: ", region_info$HighestCountry, " (", round(region_info$HighestScore * 100, 1), "%)"), br(),
-        paste0("Lowest Net: ", region_info$LowestCountry, " (", round(region_info$LowestScore * 100, 1), "%)")
+        style = "margin-top: 0.3em;",
+        paste0("Highest Net: ", region_info$HighestCountry, " "), 
+        color_score(region_info$HighestScore), br(),
+        paste0("Lowest Net: ", region_info$LowestCountry, " "), 
+        color_score(region_info$LowestScore)
       )
-    })
-  )
+    )  # <-- This div closes correctly now
+  })
+)
 })
 ```
