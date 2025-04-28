@@ -1,0 +1,4 @@
+- source: lab-4.qmd
+  quarto-pub:
+    - id: 1e810ed2-71c2-4f95-9cad-c457f644f4b4
+      url: https://mattbabb737.quarto.pub/lab-4
